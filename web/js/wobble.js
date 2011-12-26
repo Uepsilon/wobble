@@ -95,7 +95,7 @@ JSONRPC.prototype._call = function(requestId, name, args, callback) {
 		},
 		success: function(data, textStatus, jqXHR) {					
 			if ( data.error ) {
-				BUS.fire('this.RPC.error', {
+				BUS.fire('RPC.error', {
 					request: body,
 					error: data.error
 				});
@@ -111,7 +111,7 @@ JSONRPC.prototype._call = function(requestId, name, args, callback) {
 	};
 	if ( callback ) {
 		ajaxSettings.error = function(jqXHR, textStatus, errorThrown) {
-			BUS.fire('this.RPC.connectionerror', {text: textStatus, error: errorThrown});
+			BUS.fire('RPC.connectionerror', {method: name, text: textStatus, error: errorThrown});
 			callback(errorThrown);
 		};
 		
@@ -185,7 +185,7 @@ WobbleAPI.prototype.topics_create = function(id, callback) {
 	this.RPC.doRPC('topics_create', {id: id}, callback);
 };
 
-WobbleAPI.prototype.load_topic_details = function(topicId, callback) {
+WobbleAPI.prototype.topic_get = function(topicId, callback) {
 	this.RPC.doRPC('topic_get_details', {id: topicId}, callback);
 };
 
@@ -215,8 +215,8 @@ WobbleAPI.prototype.topic_remove_user = function(topicId, contactId, callback) {
 WobbleAPI.prototype.post_change_read = function(topicId, postId, readStatus, callback) {
 	this.RPC.doRPC('post_read', {topic_id: topicId, post_id: postId, read: readStatus}, callback);	
 };
-WobbleAPI.prototype.post_create = function(topicId, postId, parentPostId, callback) {
-	this.RPC.doRPC('post_create', {topic_id: topicId, post_id: postId, parent_post_id: parentPostId}, callback);
+WobbleAPI.prototype.post_create = function(topicId, postId, parentPostId, inlineReply, callback) {
+	this.RPC.doRPC('post_create', {topic_id: topicId, post_id: postId, parent_post_id: parentPostId, inline_reply: inlineReply}, callback);
 };
 WobbleAPI.prototype.post_edit = function(topicId, postId, content, revision_no, callback) {
 	this.RPC.doRPC('post_edit', {topic_id: topicId, post_id: postId, revision_no: revision_no, content: content}, callback);

@@ -19,7 +19,7 @@
 			  t.id id, 
 			  substr(p.content, 1, 200) abstract, 
 			  (select max(last_touch) from posts WHERE topic_id = t.id) max_last_touch, 
-			  (select count(*) from posts where topic_id = t.id) post_count_total, 
+			  (select count(*) from posts where topic_id = t.id AND deleted = 0) post_count_total, 
 			  (select count(*) from post_users_read where topic_id = p.topic_id AND user_id = r.user_id) post_count_read 
 		 FROM topics t, topic_readers r, posts p 
 		WHERE r.user_id = ? AND r.topic_id = t.id AND t.id = p.topic_id AND p.post_id = cast(1 as char)
@@ -48,15 +48,15 @@
 	 * The client must be authenticated and a reader of the given topic.
 	 * 
 	 * input = {'id': TopicId}
-	 * result = TopicId
+	 * result = {'topic_id': TopicId}
 	 *
 	 */
 	function topics_create($params) {
 		$self_user_id = ctx_getuserid();
 		$topic_id = $params['id'];
 
-		ValidationService::check_not_empty($self_user_id);
-		ValidationService::check_not_empty($topic_id);
+		ValidationService::validate_not_empty($self_user_id);
+		ValidationService::validate_not_empty($topic_id);
 
 		$pdo = ctx_getpdo();
 		
@@ -67,20 +67,8 @@
 		
 		$stmt = $pdo->prepare('INSERT INTO topic_readers (topic_id, user_id) VALUES (?,?)');
 		$stmt->execute(array($topic_id, $self_user_id));
+
+		TopicRepository::createPost($topic_id, '1', $self_user_id, NULL);
 		
-		// Create empty root post
-		$stmt = $pdo->prepare('INSERT INTO posts (topic_id, post_id, content)  VALUES (?,?,?)');
-		$stmt->bindValue(1, $topic_id);
-		$stmt->bindValue(2, '1'); # default ROOT ID
-		$stmt->bindValue(3, '');
-		$stmt->execute();
-		
-		// Assoc first post with current user
-		$stmt = $pdo->prepare('INSERT INTO post_editors (topic_id, post_id, user_id) VALUES (?,?,?)');
-		$stmt->bindValue(1, $topic_id);
-		$stmt->bindValue(2, '1');
-		$stmt->bindValue(3, $self_user_id);
-		$stmt->execute();
-		
-		return $topic_id;
+		return array('topic_id' => $topic_id);
 	}

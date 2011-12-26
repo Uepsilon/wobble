@@ -4,7 +4,7 @@
 	define('PDO_PASSWORD', 'lamproot');
 	
 	# Adds a usleep() call to each request to mimick internet latency on local development boxes
-	define('SIMULATE_LAG', true);
+	# define('SIMULATE_LAG', true);
 
 	# Replace value with something totally random for Production environments. Leave empty for only md5-ing the passwords
 	define('PASSWORD_SALT', 'myStaticSalt'); 

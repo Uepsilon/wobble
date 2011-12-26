@@ -11,7 +11,7 @@
 	##############################################################
 	
 	
-	if (SIMULATE_LAG) {
+	if (defined('SIMULATE_LAG') && SIMULATE_LAG) {
 		// Decrease the performance
 		usleep(1000 * rand(100, 3000));
 	}

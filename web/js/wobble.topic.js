@@ -179,7 +179,7 @@ function TopicPresenter(view, model) {
 	view.onReplyPost = function(post) {
 		var newPost = model.createReply(post);
 		newPost.locked = true;
-		API.post_create(model.getTopic().id, newPost.id, newPost.parent, function(err, data) {
+		API.post_create(model.getTopic().id, newPost.id, newPost.parent, false, function(err, data) {
 			newPost.locked = false;
 			view.renderPost(model.getTopic(), newPost);
 		});
@@ -238,7 +238,7 @@ TopicPresenter.prototype.refreshTopic = function(callback) {
 		
 	var that  = this;
 	
-	API.load_topic_details(this.model.getTopic().id, function(err, topicDetails) {
+	API.topic_get(this.model.getTopic().id, function(err, topicDetails) {
 		var modelTopic = that.model.getTopic();
 		if (modelTopic !== null && topicDetails !== undefined && topicDetails.id == modelTopic.id) { // Check that we still want to see this data
 			that.setSelectedTopic(topicDetails);

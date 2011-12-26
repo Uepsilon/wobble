@@ -9,7 +9,14 @@
 		<script src="js/wobble.js"></script>
 
   		<script>
+  		  var TEST_USER = 'stephan.zeissler@moinz.de',
+  		      TEST_PASSWORD = 'stephan99';
+
 		  $(document).ready(function(){
+		  	// Loads current user ID infos (so its cached locally)
+		  	window.RPC = new JSONRPC('./api/endpoint.php');
+			window.API = new WobbleAPI(window.RPC); 
+
 			module("BUS");  
 			test("BUS available", function() {
 			  ok( window.BUS !== undefined, "BUS is available" );
@@ -32,8 +39,12 @@
 			});
 
 			module("RPC");
-			test("RPC object available", 1, function() {
-			  ok( window.RPC !== undefined, "RPC is available" );
+			test("RPC object available", 3, function() {
+			  ok( window.JSONRPC !== undefined, "JSONRPC is available" );
+
+			  var rpc = new JSONRPC('someurl');
+			  ok(rpc.doRPC);
+			  ok(rpc.doNotification);
 			});
 			asyncTest('System Functions', 2, function() {
 				RPC.doRPC('system.listMethods', {}, function(err, result) {
@@ -62,14 +73,14 @@
 			});
 			
 			asyncTest("simple login+whoami+logout", 7, function() {
-			  API.login("stephan.zeissler@moinz.de", "stephan99", function(err, result) {
+			  API.login(TEST_USER, TEST_PASSWORD, function(err, result) {
 			  	equal(err, null, "No error retrieved");
 			  	equal(result, true, "TRUE received");
 			  	
 			  	API.user_get(function(err, result) {
 			  		equal(err, null, "No error retrieved");
 			  		ok(result != null, "TRUE received");
-			  		equals("stephan.zeissler@moinz.de", result.email, "Email is stephan.zeissler@moinz.de");
+			  		equals(TEST_USER, result.email, "Email is " + TEST_USER);
 
 			  		API.signout(function(err, result) {
 			  			equal(err, null, "No error retrieved");
@@ -87,9 +98,217 @@
 				expect(2);
 				stop();
 				API.wobble_api_version(function(err, result) {
-					equal(err, null, 'No error received');
+					equal(err, undefined, 'No error received');
 					equal(result, '0.0.1', 'Version is 0.0.1');
 					start();
+				});
+			});
+
+			module('API.Topics');
+			asyncTest('Edit root post', 15, function() {
+				var TEST_TOPIC_ID = 'QUnit-1234567890-' + Math.random(),
+					ROOT_ID = '1',
+					EXAMPLE_CONTENT = '12345',
+					START_REV_NO = 1;
+
+				API.login(TEST_USER, TEST_PASSWORD, function(err, result) {
+					equal(err, undefined, 'No error expected');
+					equal(result, true, 'TRUE expected');
+
+					API.topics_create(TEST_TOPIC_ID, function(err, result) {
+						equal(err, undefined);
+						equal(TEST_TOPIC_ID, result.topic_id);
+
+						API.post_edit(TEST_TOPIC_ID, ROOT_ID, EXAMPLE_CONTENT, START_REV_NO, function(err, result) {
+							equal(err, undefined);
+							ok(result != null);
+							equal(result.revision_no, 2);
+
+							API.topic_get(TEST_TOPIC_ID, function(err, topic) {
+								equal(err, undefined);
+								ok(topic != null);
+
+								equal(topic.id, TEST_TOPIC_ID, 'Topic ID');
+								equal(topic.readers.length, 1, 'Numbers of active users in this topic');
+								equal(topic.writers.length, 1, 'Number of users ever written a post');
+
+								equal(topic.posts.length, 1, ' Number of posts');
+
+								equal(topic.posts[0].revision_no, 2, 'Revision No');
+								equal(topic.posts[0].content, EXAMPLE_CONTENT, 'Post content');
+
+								start();
+							});
+
+						});
+					});
+				});
+			});
+			
+			/**
+			 * Tests a simple login-newtopic-newreply-deletepost and checks
+			 * that the topic no longer contains the post.
+			 */
+			asyncTest('Delete post', 15, function() {
+				var TEST_TOPIC_ID = 'QUnit-1234567890-' + Math.random(),
+					ROOT_ID = '1',
+					REPLY_POST_ID = '12345';
+
+				API.login(TEST_USER, TEST_PASSWORD, function(err, result) {
+					equal(err, undefined, 'No error expected');
+					equal(result, true, 'TRUE expected');
+
+					API.topics_create(TEST_TOPIC_ID, function(err, result) {
+						equal(err, undefined);
+						equal(TEST_TOPIC_ID, result.topic_id);
+
+						API.post_create(TEST_TOPIC_ID, REPLY_POST_ID, ROOT_ID, true, function(err, result) {
+							equal(err, undefined);
+
+							API.post_delete(TEST_TOPIC_ID, REPLY_POST_ID, function(err, result) {
+								equal(err, undefined);
+								equal(result, true);
+
+								API.topic_get(TEST_TOPIC_ID, function(err, topic) {
+									equal(err, undefined);
+									ok(topic != null);
+
+									equal(topic.id, TEST_TOPIC_ID, 'Topic ID');
+									equal(topic.readers.length, 1, 'Numbers of active users in this topic');
+									equal(topic.writers.length, 1, 'Number of users ever written a post');
+
+									equal(topic.posts.length, 1, ' Number of posts');
+
+									equal(topic.posts[0].revision_no, 1, 'Revision No');
+									equal(topic.posts[0].content, '', 'Post content');
+									
+									start();
+								});
+							});
+						});
+					});
+				});
+			});
+
+
+			/**
+			 * tests that the inline-reply/intended reply works.
+			 */
+			asyncTest('post types', 22, function() {
+				var TEST_TOPIC_ID = 'QUnit-1234567890-' + Math.random(),
+					ROOT_ID = '1',
+					REPLY_POST_ID1 = '12345',
+					REPLY_POST_ID2 = '22345';
+
+				API.login(TEST_USER, TEST_PASSWORD, function(err, result) {
+					equal(err, undefined, 'No error expected');
+					equal(result, true, 'TRUE expected');
+
+					API.topics_create(TEST_TOPIC_ID, function(err, result) {
+						equal(err, undefined);
+						equal(TEST_TOPIC_ID, result.topic_id);
+
+						API.post_create(TEST_TOPIC_ID, REPLY_POST_ID1, ROOT_ID, true, function(err, result) {
+							equal(err, undefined);
+							equal(result, true);
+
+							API.post_create(TEST_TOPIC_ID, REPLY_POST_ID2, ROOT_ID, false, function(err, result) {
+								equal(err, undefined);
+								equal(result, true);
+
+								API.topic_get(TEST_TOPIC_ID, function(err, topic) {
+									equal(err, undefined);
+									ok(topic != null);
+
+									equal(topic.id, TEST_TOPIC_ID, 'Topic ID');
+									equal(topic.readers.length, 1, 'Numbers of active users in this topic');
+									equal(topic.writers.length, 1, 'Number of users ever written a post');
+
+									equal(topic.posts.length, 3, 'Number of posts');
+
+									equal(topic.posts[0].revision_no, 1, 'Revision No');
+									equal(topic.posts[0].content, '', 'Post content');
+
+									equal(topic.posts[1].revision_no, 1, 'Revision No');
+									equal(topic.posts[1].content, '', 'Post content');
+									equal(topic.posts[1].inline, true, 'Is inline reply');
+
+									equal(topic.posts[2].revision_no, 1, 'Revision No');
+									equal(topic.posts[2].content, '', 'Post content');
+									equal(topic.posts[2].inline, false, 'Is no inline reply');
+									
+									start();
+								});
+							});
+
+						});
+					});
+				});
+			});
+			/**
+			 * Tests that the first inline-reply to an intended reply becomes an intended reply, when
+			 * the intended-reply gets deleted. 
+			 *
+			 * For this we need three posts (the root cannot be deleted).
+			 */
+			asyncTest('post types+fix replies after delete', 21, function() {
+				var TEST_TOPIC_ID = 'QUnit-1234567890-' + Math.random(),
+					ROOT_ID = '1',
+					REPLY_POST_ID1 = '12345',
+					REPLY_POST_ID2 = '22345';
+
+				API.login(TEST_USER, TEST_PASSWORD, function(err, result) {
+					equal(err, undefined, 'No error expected');
+					equal(result, true, 'TRUE expected');
+
+					API.topics_create(TEST_TOPIC_ID, function(err, result) {
+						equal(err, undefined);
+						equal(TEST_TOPIC_ID, result.topic_id);
+
+						API.post_create(TEST_TOPIC_ID, REPLY_POST_ID1, ROOT_ID, false, function(err, result) {
+							equal(err, undefined);
+							equal(result, true);
+
+							API.post_create(TEST_TOPIC_ID, REPLY_POST_ID2, ROOT_ID, true, function(err, result) {
+								equal(err, undefined);
+								equal(result, true);
+
+								// Now that we have the three posts:
+								// <ROOT>
+								//  \- <R1>
+								//     <R2>
+								// 
+
+								API.post_delete(TEST_TOPIC_ID, REPLY_POST_ID1, function(err, result) {
+									equal(err, undefined);
+									ok(result);
+
+									API.topic_get(TEST_TOPIC_ID, function(err, topic) {
+										equal(err, undefined);
+										ok(topic != null);
+
+										equal(topic.id, TEST_TOPIC_ID, 'Topic ID');
+										equal(topic.readers.length, 1, 'Numbers of active users in this topic');
+										equal(topic.writers.length, 1, 'Number of users ever written a post');
+
+										equal(topic.posts.length, 2, 'Number of posts');
+
+										equal(topic.posts[0].revision_no, 1, 'Revision No');
+										equal(topic.posts[0].content, '', 'Post content');
+
+										equal(topic.posts[1].revision_no, 1, 'Revision No');
+										equal(topic.posts[1].content, '', 'Post content');
+										equal(topic.posts[1].inline, false, 'Is no inline reply');
+										
+										start();
+									});
+								});
+
+								
+							});
+
+						});
+					});
 				});
 			});
 		  });

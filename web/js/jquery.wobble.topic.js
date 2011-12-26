@@ -137,7 +137,6 @@ jQueryTopicView.prototype.renderPost = function(topic, post) {
 	
 	if ( post.deleted != 1) {
 		// Render children
-		
 		var ePostUsers = $(">.post>.users", jPostWrapper);
 		this._renderPostUsers(post, ePostUsers);
 		

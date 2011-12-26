@@ -3,6 +3,10 @@
 	 * Global Types:
 	 * TopicId, PostId = string()
 	 * UserId = int()
+	 *
+	 * boolean = true | false
+	 * true = 1
+	 * false = 0
 	 **/
 	
 
@@ -44,9 +48,22 @@
 		
 		$readers = TopicRepository::getReaders($topic_id);
 		$writers = TopicRepository::getWriters($topic_id);
-				
-		$stmt = $pdo->prepare('SELECT p.post_id id, p.content, p.revision_no revision_no, p.parent_post_id parent, p.last_touch timestamp, p.deleted deleted, coalesce((select 0 from post_users_read where topic_id = p.topic_id AND post_id = p.post_id AND user_id = ?), 1) unread 
-								FROM posts p WHERE p.topic_id = ? ORDER BY created_at');
+		
+		# NOTE: We fetch all posts here (including the half-deleted ones)
+		$stmt = $pdo->prepare('SELECT 
+				p.post_id id, 
+				p.content, 
+				p.revision_no revision_no, 
+				p.parent_post_id parent, 
+				p.last_touch timestamp, 
+				p.post_type type,
+				p.deleted deleted, 
+				coalesce((select 0 from post_users_read where topic_id = p.topic_id 
+						  AND post_id = p.post_id AND user_id = ?), 1) unread 
+			 FROM posts p 
+			WHERE p.topic_id = ? 
+			ORDER BY created_at
+		');
 		$stmt->execute(array($self_user_id, $topic_id));
 		$posts = $stmt->fetchAll();
 		
@@ -57,6 +74,13 @@
 			$posts[$i]['revision_no'] = intval($posts[$i]['revision_no']);
 			$posts[$i]['deleted'] = intval($posts[$i]['deleted']);
 			$posts[$i]['unread'] = intval($posts[$i]['unread']);
+
+			if ($posts[$i]['type'] == Topic::TYPE_INLINE) {
+				$posts[$i]['inline'] = true;
+			} else {
+				$posts[$i]['inline'] = false;
+			}
+			unset($posts[$i]['type']);
 
 			# Subobject
 			$posts[$i]['users'] = array();
@@ -163,24 +187,17 @@
 		$topic_id = $params['topic_id'];
 		$post_id = $params['post_id'];
 		$parent_post_id = $params['parent_post_id'];
+		$inline_reply = $params['inline_reply'];
 		
 		ValidationService::validate_not_empty($topic_id);
 		ValidationService::validate_not_empty($post_id);
 		ValidationService::validate_not_empty($parent_post_id);
+		ValidationService::validate_boolean($inline_reply);
 		
 		$pdo = ctx_getpdo();
 		
 		if ( _topic_has_access($pdo, $topic_id) ) {
-			// Create empty root post
-			$stmt = $pdo->prepare('INSERT INTO posts (topic_id, post_id, content, parent_post_id, created_at, last_touch)  VALUES (?,?, "",?, unix_timestamp(), unix_timestamp())');
-			$stmt->execute(array($topic_id, $post_id, $parent_post_id));
-			
-			// Assoc first post with current user
-			$stmt = $pdo->prepare('INSERT INTO post_editors (topic_id, post_id, user_id) VALUES (?,?,?)');
-			$stmt->bindValue(1, $topic_id);
-			$stmt->bindValue(2, $post_id);
-			$stmt->bindValue(3, $self_user_id);
-			$stmt->execute();
+			TopicRepository::createPost($topic_id, $post_id, $self_user_id, $parent_post_id, $inline_reply);
 			
 			foreach(TopicRepository::getReaders($topic_id) as $user) {
 				NotificationRepository::push($user['id'], array(
@@ -296,20 +313,17 @@
 		$pdo = ctx_getpdo();
 		
 		if ( _topic_has_access($pdo, $topic_id) ) {
-			$stmt = $pdo->prepare('DELETE FROM post_editors WHERE topic_id = ? AND post_id = ?');
-			$stmt->execute(array($topic_id, $post_id));
+			TopicRepository::deletePost($topic_id, $post_id);
 			
-			$pdo->prepare('UPDATE posts SET deleted = 1, content = NULL WHERE topic_id = ? AND post_id = ?')->execute(array($topic_id, $post_id));
-
-			$pdo->prepare('DELETE FROM post_users_read WHERE topic_id = ? AND post_id = ?')->execute(array($topic_id, $post_id));
-			
-			TopicRepository::deletePostsIfNoChilds($topic_id, $post_id); # Traverses upwards and deletes all posts, if no child exist
-
 			foreach(TopicRepository::getReaders($topic_id) as $user) {
 				NotificationRepository::push($user['id'], array(
 					'type' => 'post_deleted',
 					'topic_id' => $topic_id,
 					'post_id' => $post_id
+				));
+				NotificationRepository::push($user['id'], array(
+					'type' => 'topic_changed',
+					'topic_id' => $topic_id
 				));
 			}
 			return TRUE;
