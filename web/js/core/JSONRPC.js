@@ -37,7 +37,7 @@ JSONRPC.prototype._call = function(requestId, name, args, callback) {
 			
 	var body = {
 		jsonrpc: "2.0",
-		method: name,
+		method: name
 	};
 	if (args) {
 		body.params = args;

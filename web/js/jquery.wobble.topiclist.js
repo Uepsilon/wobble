@@ -70,13 +70,13 @@ jQueryTopicsView.prototype.renderTopic = function(topic, prepend) {
 		}
 	});
 
-	var abstract = $(".abstract", $li).html(topic.abstract);
+	var $abstract = $(".abstract", $li).html(topic['abstract']);
 
-	if ( topic.post_count_unread > 0) {
-		abstract.css('font-weight', 'bold');
+	if (topic.post_count_unread > 0) {
+		$abstract.css('font-weight', 'bold');
 	}
 	
-	if ( prepend ) {
+	if (prepend) {
 		$li.prependTo(this.$topics);
 	} else {
 		$li.appendTo(this.$topics)
